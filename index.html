@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DEEP · geometric exploration</title>
+<style>
+*{margin:0;padding:0}
+body{background:#07070d;overflow:hidden;font-family:monospace;cursor:default}
+canvas{display:block}
+#blocker{position:fixed;top:0;left:0;width:100%;height:100%;z-index:10;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(7,7,13,.85);cursor:pointer;transition:opacity .5s}
+#blocker.hidden{opacity:0;pointer-events:none}
+#blocker h1{color:#fff;font-size:clamp(20px,4vw,48px);font-weight:400;letter-spacing:8px;text-transform:uppercase;margin-bottom:8px;font-family:monospace}
+#blocker h1 span{color:#00d4aa}
+#blocker p{color:rgba(255,255,255,.25);font-size:11px;letter-spacing:4px;text-transform:uppercase;margin-bottom:20px}
+#blocker .key{display:inline-block;border:1px solid rgba(255,255,255,.08);padding:6px 12px;border-radius:2px;margin:0 3px;color:rgba(255,255,255,.3);font-size:10px;letter-spacing:2px}
+#blocker .click-msg{color:rgba(0,212,170,.5);font-size:12px;letter-spacing:3px;margin-top:20px;border:1px solid rgba(0,212,170,.1);padding:10px 24px;border-radius:4px;transition:.3s}
+#blocker .click-msg:hover{background:rgba(0,212,170,.05);border-color:rgba(0,212,170,.2)}
+#hud{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:5;pointer-events:none;text-align:center}
+#hud .pos{color:rgba(255,255,255,.06);font-size:9px;letter-spacing:2px;font-family:monospace}
+#hud .area{color:rgba(0,212,170,.2);font-size:8px;letter-spacing:4px;text-transform:uppercase;margin-top:4px;font-family:monospace}
+#crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;pointer-events:none}
+#crosshair::before,#crosshair::after{content:'';position:absolute;background:rgba(255,255,255,.06)}
+#crosshair::before{width:1px;height:12px;top:-6px;left:0}
+#crosshair::after{width:12px;height:1px;top:0;left:-6px}
+#secret{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);z-index:6;pointer-events:none;text-align:center;opacity:0;transition:opacity .6s;font-family:monospace}
+#secret.show{opacity:1}
+#secret .t{color:#fff;font-size:13px;letter-spacing:2px;margin-bottom:4px;text-shadow:0 0 20px rgba(0,212,170,.2)}
+#secret .h{color:rgba(0,212,170,.3);font-size:9px;letter-spacing:3px;text-transform:uppercase}
+#stats{position:fixed;top:16px;right:16px;z-index:5;pointer-events:none;color:rgba(255,255,255,.04);font-size:8px;letter-spacing:2px;text-align:right;line-height:1.8;font-family:monospace}
+</style>
+</head>
+<body>
+<div id="blocker">
+  <h1><span>⬡</span> DEEP</h1>
+  <p>geometric exploration</p>
+  <div><span class="key">W A S D</span> <span style="color:rgba(255,255,255,.1)">move</span></div>
+  <div style="margin-top:6px"><span class="key">E</span> <span style="color:rgba(255,255,255,.1)">interact</span> <span class="key">SHIFT</span> <span style="color:rgba(255,255,255,.1)">sprint</span></div>
+  <div class="click-msg">✦ click to enter</div>
+</div>
+<div id="crosshair"></div>
+<div id="hud"><div class="pos" id="pos-display">0 0 0</div><div class="area" id="area-display">—</div></div>
+<div id="secret"><div class="t" id="secret-text"></div><div class="h" id="secret-hint"></div></div>
+<div id="stats">FPS: <span id="fps">0</span></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════
+// DEEP — 3D geometric exploration
+// ═══════════════════════════════════════════════════════════════
+
+const scene = new THREE.Scene()
+scene.background = new THREE.Color(0x07070d)
+scene.fog = new THREE.FogExp2(0x07070d, .004)
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, .1, 200)
+camera.position.set(0, 1.6, 0)
+
+const renderer = new THREE.WebGLRenderer({ antialias: true })
+renderer.setSize(innerWidth, innerHeight)
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+renderer.shadowMap.enabled = true
+renderer.shadowMap.type = THREE.PCFSoftShadowMap
+renderer.toneMapping = THREE.ACESFilmicToneMapping
+renderer.toneMappingExposure = 1.0
+document.body.prepend(renderer.domElement)
+
+// ─── Lights ───
+scene.add(new THREE.AmbientLight(0x111133, .25))
+scene.add(new THREE.HemisphereLight(0x00d4aa, 0x050510, .3))
+const sun = new THREE.DirectionalLight(0xffeedd, .8); sun.position.set(10, 20, 10); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); scene.add(sun)
+scene.add(new THREE.DirectionalLight(0x4488ff, .15).position.set(-10, 5, -10))
+scene.add(new THREE.DirectionalLight(0xff00aa, .05).position.set(0, -10, 0))
+
+// ═══════════════════════════════════════════════════════════════
+// WORLD BUILDER
+// ═══════════════════════════════════════════════════════════════
+
+const world = new THREE.Group()
+scene.add(world)
+const interactables = []
+
+const PALETTE = {
+  floor: 0x0a0a18,
+  wall: 0x111122,
+  accent: 0x00d4aa,
+  accent2: 0x7c4dff,
+  accent3: 0xff00aa,
+  glow: 0x00d4aa,
+  crystal: 0x44aaff
+}
+
+function hsl(h,s,l){return new THREE.Color().setHSL(h,s,l)}
+
+// ─── Ground plane ───
+function buildGround() {
+  const g = new THREE.PlaneGeometry(200, 200, 1, 1)
+  const m = new THREE.MeshStandardMaterial({ color: PALETTE.floor, roughness: .9, metalness: .1 })
+  const mesh = new THREE.Mesh(g, m)
+  mesh.rotation.x = -Math.PI / 2
+  mesh.position.y = -.1
+  mesh.receiveShadow = true
+  return mesh
+}
+world.add(buildGround())
+
+// ─── Grid lines ───
+function buildGrid() {
+  const g = new THREE.Group()
+  const mat = new THREE.LineBasicMaterial({ color: 0x111133, transparent: true, opacity: .15 })
+  for (let i = -50; i <= 50; i += 4) {
+    const g1 = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(i, 0, -50), new THREE.Vector3(i, 0, 50)])
+    g.add(new THREE.Line(g1, mat))
+    const g2 = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-50, 0, i), new THREE.Vector3(50, 0, i)])
+    g.add(new THREE.Line(g2, mat))
+  }
+  g.position.y = -.05
+  return g
+}
+world.add(buildGrid())
+
+// ─── Zone 1: CENTRAL SPIRE ───
+function buildSpire() {
+  const g = new THREE.Group()
+
+  // Main tower
+  for (let i = 0; i < 20; i++) {
+    const h = .5, y = i * h
+    const s = 3 - i * .12
+    if (s < .3) break
+    const geo = new THREE.OctahedronGeometry(s, 1)
+    const mat = new THREE.MeshStandardMaterial({
+      color: hsl(.45 + i * .01, .3, .08 + i * .02),
+      wireframe: i % 3 === 0,
+      transparent: true, opacity: .1 + i * .02,
+      metalness: .2, roughness: .8
+    })
+    const m = new THREE.Mesh(geo, mat)
+    m.position.y = y
+    m.rotation.y = i * .3
+    m.scale.y = .3 + i * .02
+    g.add(m)
+  }
+
+  // Glow at top
+  const glow = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(.3, 2),
+    new THREE.MeshBasicMaterial({ color: 0x00d4aa, transparent: true, opacity: .08 })
+  )
+  glow.position.y = 9.5
+  g.add(glow)
+
+  // Ring
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(2.5, .04, 8, 48),
+    new THREE.MeshBasicMaterial({ color: 0x00d4aa, transparent: true, opacity: .05 })
+  )
+  ring.position.y = 1
+  ring.rotation.x = Math.PI / 3
+  g.add(ring)
+
+  g.position.set(0, 0, 0)
+  return g
+}
+world.add(buildSpire())
+
+// ─── Zone 2: CRYSTAL GARDEN ───
+function buildCrystalGarden() {
+  const g = new THREE.Group()
+  const colors = [0x7c4dff, 0x9966ff, 0x5533bb, 0x00d4aa]
+
+  for (let gi = 0; gi < 4; gi++) {
+    const cx = (Math.random()-.5)*6, cz = (Math.random()-.5)*6
+    for (let i = 0; i < 8; i++) {
+      const h = .3 + Math.random() * 2
+      const geo = new THREE.CylinderGeometry(.02 + Math.random()*.06, .05 + Math.random()*.1, h, 4 + Math.floor(Math.random()*4))
+      const mat = new THREE.MeshPhysicalMaterial({
+        color: colors[gi % colors.length],
+        emissive: colors[gi % colors.length],
+        emissiveIntensity: .04,
+        transparent: true, opacity: .2 + Math.random() * .3,
+        roughness: .1, metalness: 0,
+        clearcoat: .2
+      })
+      const m = new THREE.Mesh(geo, mat)
+      const a = Math.random() * Math.PI * 2
+      const r = .2 + Math.random() * 1
+      m.position.set(cx + Math.cos(a)*r, h/2, cz + Math.sin(a)*r)
+      m.rotation.set((Math.random()-.5)*.3, Math.random()*6, (Math.random()-.5)*.3)
+      m.castShadow = true
+      g.add(m)
+    }
+  }
+
+  // Light beacons
+  for (let i = 0; i < 6; i++) {
+    const a = (i/6)*Math.PI*2, r = 4
+    const sphere = new THREE.Mesh(
+      new THREE.SphereGeometry(.06, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0x7c4dff, transparent: true, opacity: .1 })
+    )
+    sphere.position.set(Math.cos(a)*r, .1, Math.sin(a)*r)
+    g.add(sphere)
+    // Beam line
+    const line = new THREE.Mesh(
+      new THREE.CylinderGeometry(.01, .01, .5, 4),
+      new THREE.MeshBasicMaterial({ color: 0x7c4dff, transparent: true, opacity: .02 })
+    )
+    line.position.set(Math.cos(a)*r, .35, Math.sin(a)*r)
+    g.add(line)
+  }
+
+  g.position.set(-18, 0, -15)
+  return g
+}
+world.add(buildCrystalGarden())
+
+// ─── Zone 3: COLOSSAL ARCHES ───
+function buildArches() {
+  const g = new THREE.Group()
+
+  for (let i = 0; i < 5; i++) {
+    const span = 3 + Math.random() * 4
+    const height = 2 + Math.random() * 3
+    const segments = 12
+    const points = []
+    for (let j = 0; j <= segments; j++) {
+      const t = j / segments
+      const angle = t * Math.PI
+      const x = Math.cos(angle) * span/2
+      const y = Math.sin(angle) * height
+      points.push(new THREE.Vector3(x, y, 0))
+    }
+    const curve = new THREE.CatmullRomCurve3(points)
+    const tube = new THREE.TubeGeometry(curve, 20, .03 + Math.random()*.04, 4, false)
+    const mat = new THREE.MeshStandardMaterial({
+      color: hsl(.42 + Math.random()*.15, .3, .12),
+      transparent: true, opacity: .15 + Math.random() * .15,
+      metalness: .5, roughness: .5
+    })
+    const mesh = new THREE.Mesh(tube, mat)
+    const angle2 = (i/5)*Math.PI*2
+    const r = 2 + Math.random() * 2
+    mesh.position.set(Math.cos(angle2)*r, 0, Math.sin(angle2)*r)
+    mesh.rotation.y = angle2 + .3
+    g.add(mesh)
+  }
+
+  g.position.set(20, 0, -18)
+  return g
+}
+world.add(buildArches())
+
+// ─── Zone 4: THE GRID (neon matrix) ───
+function buildGridZone() {
+  const g = new THREE.Group()
+
+  // Floor tiles
+  for (let x = -3; x <= 3; x++) {
+    for (let z = -3; z <= 3; z++) {
+      const tile = new THREE.Mesh(
+        new THREE.BoxGeometry(.8, .02, .8),
+        new THREE.MeshStandardMaterial({
+          color: PALETTE.wall,
+          transparent: true, opacity: .3,
+          metalness: .5, roughness: .3
+        })
+      )
+      tile.position.set(x*.9, 0, z*.9)
+      g.add(tile)
+      // Edge glow
+      if (Math.random() < .2) {
+        const glow = new THREE.Mesh(
+          new THREE.BoxGeometry(.75, .01, .75),
+          new THREE.MeshBasicMaterial({ color: 0x00d4aa, transparent: true, opacity: .03 })
+        )
+        glow.position.set(x*.9, .02, z*.9)
+        g.add(glow)
+      }
+    }
+  }
+
+  // Neon pillars at corners
+  for (let i = 0; i < 4; i++) {
+    const a = (i/4)*Math.PI*2 + Math.PI/4
+    const r = 4.5
+    const p = new THREE.Mesh(
+      new THREE.BoxGeometry(.05, 3, .05),
+      new THREE.MeshBasicMaterial({ color: 0x00d4aa, transparent: true, opacity: .04 })
+    )
+    p.position.set(Math.cos(a)*r, 1.5, Math.sin(a)*r)
+    g.add(p)
+  }
+
+  g.position.set(-25, 0, 10)
+  return g
+}
+world.add(buildGridZone())
+
+// ─── Zone 5: FLOATING ROCKS ───
+function buildFloatingIslands() {
+  const g = new THREE.Group()
+
+  for (let i = 0; i < 15; i++) {
+    const s = .3 + Math.random() * 1.2
+    const geo = new THREE.DodecahedronGeometry(s, 0)
+    const mat = new THREE.MeshStandardMaterial({
+      color: hsl(.4 + Math.random()*.2, .2, .05 + Math.random()*.1),
+      flatShading: true,
+      transparent: true, opacity: .2 + Math.random() * .3,
+      roughness: .8, metalness: .1
+    })
+    const m = new THREE.Mesh(geo, mat)
+    const a = Math.random() * Math.PI * 2
+    const r = 2 + Math.random() * 4
+    m.position.set(
+      Math.cos(a) * r,
+      .5 + Math.random() * 2.5,
+      Math.sin(a) * r
+    )
+    m.rotation.set(Math.random()*6, Math.random()*6, Math.random()*6)
+    m.userData = { rotSpeed: (Math.random()-.5)*.005, floatOffset: Math.random()*6 }
+    g.add(m)
+  }
+
+  g.position.set(25, 1, 15)
+  return g
+}
+world.add(buildFloatingIslands())
+
+// ─── Zone 6: THE RING (large circular structure) ───
+function buildRing() {
+  const g = new THREE.Group()
+
+  for (let i = 0; i < 24; i++) {
+    const a = (i/24) * Math.PI * 2
+    const r = 5
+    const geo = new THREE.OctahedronGeometry(.15, 0)
+    const mat = new THREE.MeshStandardMaterial({
+      color: hsl(.55 + i*.01, .5, .15),
+      wireframe: i % 2 === 0,
+      transparent: true, opacity: .2,
+      metalness: .3, roughness: .7
+    })
+    const m = new THREE.Mesh(geo, mat)
+    m.position.set(Math.cos(a)*r, Math.sin(a*2)*.5 + 1.5, Math.sin(a)*r)
+    g.add(m)
+  }
+
+  // Core
+  const core = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(.8, 1),
+    new THREE.MeshPhysicalMaterial({
+      color: 0x7c4dff,
+      emissive: 0x7c4dff,
+      emissiveIntensity: .05,
+      transparent: true, opacity: .1,
+      roughness: .2, metalness: .3
+    })
+  )
+  core.position.y = 1.5
+  g.add(core)
+
+  // Rings
+  for (let i = 0; i < 3; i++) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(2.5 + i, .02, 8, 48),
+      new THREE.MeshBasicMaterial({ color: 0x7c4dff, transparent: true, opacity: .03 })
+    )
+    ring.position.y = 1.5 + i * .5
+    ring.rotation.x = Math.PI / 3 + i * .2
+    g.add(ring)
+  }
+
+  g.position.set(0, 0, 30)
+  return g
+}
+world.add(buildRing())
+
+// ─── Zone 7: ABYSS GATE (portal structure) ───
+function buildAbyssGate() {
+  const g = new THREE.Group()
+
+  // Frame
+  for (let i = 0; i < 16; i++) {
+    const a = (i/16) * Math.PI * 2
+    const r = 2.5
+    const geo = new THREE.TetrahedronGeometry(.08)
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x220066,
+      emissive: 0x330088,
+      emissiveIntensity: .02,
+      transparent: true, opacity: .15
+    })
+    const m = new THREE.Mesh(geo, mat)
+    m.position.set(Math.cos(a)*r, Math.sin(a)*r + 1.5, 0)
+    g.add(m)
+  }
+
+  // Inner darkness
+  const dark = new THREE.Mesh(
+    new THREE.CircleGeometry(2, 24),
+    new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide, transparent: true, opacity: .3 })
+  )
+  dark.position.y = 1.5
+  g.add(dark)
+
+  // Particles inside
+  for (let i = 0; i < 30; i++) {
+    const geo = new THREE.SphereGeometry(.01 + Math.random()*.02, 4, 4)
+    const mat = new THREE.MeshBasicMaterial({ color: 0x4400aa, transparent: true, opacity: .02 })
+    const m = new THREE.Mesh(geo, mat)
+    const a = Math.random() * Math.PI * 2
+    const r = Math.random() * 1.8
+    m.position.set(Math.cos(a)*r, Math.sin(a)*r + 1.5, (Math.random()-.5)*.5)
+    m.userData = { theta: a, r: r, speed: .002+Math.random()*.005 }
+    g.add(m)
+  }
+
+  g.position.set(0, 0, -30)
+  return g
+}
+world.add(buildAbyssGate())
+
+// ─── Zone 8: FOREST OF TETRAHEDRONS ───
+function buildTetraForest() {
+  const g = new THREE.Group()
+
+  for (let i = 0; i < 60; i++) {
+    const s = .05 + Math.random() * .4
+    const geo = new THREE.TetrahedronGeometry(s)
+    const hue = .4 + Math.random() * .2
+    const mat = new THREE.MeshStandardMaterial({
+      color: hsl(hue, .4, .08 + Math.random()*.12),
+      transparent: true, opacity: .1 + Math.random() * .2,
+      wireframe: Math.random() > .7,
+      roughness: .7, metalness: .2
+    })
+    const m = new THREE.Mesh(geo, mat)
+    const a = Math.random() * Math.PI * 2
+    const r = .5 + Math.random() * 4
+    m.position.set(Math.cos(a)*r, s*.5, Math.sin(a)*r)
+    m.rotation.set(Math.random()*6, Math.random()*6, Math.random()*6)
+    m.castShadow = true
+    g.add(m)
+  }
+
+  g.position.set(-15, 0, 22)
+  return g
+}
+world.add(buildTetraForest())
+
+// ═══════════════════════════════════════════════════════════════
+// AMBIENT PARTICLES
+// ═══════════════════════════════════════════════════════════════
+
+const pCount = 3000, pPos = new Float32Array(pCount*3), pVel = []
+for (let i = 0; i < pCount; i++) {
+  const r = 10 + Math.random() * 40
+  const theta = Math.random() * Math.PI * 2, phi = Math.acos(2*Math.random()-1)
+  pPos[i*3] = Math.sin(phi)*Math.cos(theta)*r
+  pPos[i*3+1] = Math.sin(phi)*Math.sin(theta)*r*.3
+  pPos[i*3+2] = Math.cos(phi)*r
+  pVel.push({x:(Math.random()-.5)*.003,y:(Math.random()-.5)*.002,z:(Math.random()-.5)*.003})
+}
+const pGeo = new THREE.BufferGeometry(); pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3))
+const pMat = new THREE.PointsMaterial({ color: 0x4444aa, size: .015, transparent: true, opacity: .15, blending: THREE.AdditiveBlending, depthWrite: false })
+const particles = new THREE.Points(pGeo, pMat)
+scene.add(particles)
+
+// ═══════════════════════════════════════════════════════════════
+// HIDDEN SECRETS
+// ═══════════════════════════════════════════════════════════════
+
+const secretData = [
+  { text: 'you found the first spire', hint: 'it reaches toward nothing', pos: [0, 1.5, -3] },
+  { text: 'crystals grow in silence', hint: 'pressure + time = light', pos: [-18, 1.5, -15] },
+  { text: 'arches hold only space', hint: 'the void between is real', pos: [20, 1.5, -18] },
+  { text: 'the grid is listening', hint: 'every point connected', pos: [-25, 1.5, 10] },
+  { text: 'islands float without ocean', hint: 'what ground do you trust?', pos: [25, 2.5, 15] },
+  { text: 'the ring remembers its orbit', hint: 'all returns', pos: [0, 2.5, 30] },
+  { text: 'beyond the gate: nothing', hint: 'which is everything', pos: [0, 2, -30] },
+  { text: 'tetrahedrons dream of pyramids', hint: 'simplicity compounds', pos: [-15, 1, 22] },
+  { text: 'you are the observer', hint: 'the world renders for you', pos: [5, 2, 5] },
+  { text: 'this is not a game', hint: 'it is a place', pos: [-8, 1, -10] },
+  { text: 'the source is within', hint: '⬡', pos: [0, 8, 0] },
+  { text: 'exploration is the answer', hint: 'keep moving', pos: [10, 1, -22] }
+]
+
+let foundSecrets = 0
+
+secretData.forEach((sd, idx) => {
+  const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 128
+  const ctx = canvas.getContext('2d')
+  ctx.font = '32px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.shadowColor = '#00d4aa'; ctx.shadowBlur = 20; ctx.fillStyle = 'rgba(0,212,170,.1)'; ctx.fillText(sd.text, 256, 64)
+  ctx.shadowBlur = 10; ctx.fillStyle = 'rgba(0,212,170,.2)'; ctx.fillText(sd.text, 256, 64)
+  ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillText(sd.text, 256, 64)
+
+  const tex = new THREE.CanvasTexture(canvas); tex.needsUpdate = true
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 })
+  const sprite = new THREE.Sprite(mat)
+  sprite.scale.set(1.5, .375, 1)
+  sprite.position.set(sd.pos[0], sd.pos[1], sd.pos[2])
+  sprite.userData = { secretIdx: idx, found: false, pos: sd.pos, range: 3 }
+  world.add(sprite)
+  interactables.push(sprite)
+})
+
+// ─── Interaction detection ───
+function checkSecrets() {
+  interactables.forEach(s => {
+    if (s.userData.found) return
+    const d = camera.position.distanceTo(s.position)
+    if (d < 3) {
+      s.userData.found = true
+      foundSecrets++
+      const sd = secretData[s.userData.secretIdx]
+      const el = document.getElementById('secret')
+      document.getElementById('secret-text').textContent = `✦ ${sd.text}`
+      document.getElementById('secret-hint').textContent = sd.hint
+      el.classList.add('show')
+      setTimeout(() => el.classList.remove('show'), 4000)
+      s.material.opacity = .2
+    }
+    // Fade in by proximity
+    if (d < 8) {
+      s.material.opacity = Math.max(s.material.opacity, (1 - d/8) * .5)
+    }
+  })
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONTROLS
+// ═══════════════════════════════════════════════════════════════
+
+const keys = {}
+let yaw = 0, pitch = 0
+const vel = new THREE.Vector3()
+const euler = new THREE.Euler(0, 0, 0, 'YXZ')
+
+document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true)
+document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false)
+
+document.addEventListener('mousemove', e => {
+  if (!document.pointerLockElement) return
+  yaw -= e.movementX * .002
+  pitch -= e.movementY * .002
+  pitch = Math.max(-.8, Math.min(.8, pitch))
+})
+
+document.addEventListener('click', () => {
+  if (!document.pointerLockElement) {
+    document.getElementById('blocker').classList.add('hidden')
+    renderer.domElement.requestPointerLock()
+  }
+})
+
+document.addEventListener('pointerlockchange', () => {
+  if (!document.pointerLockElement) {
+    document.getElementById('blocker').classList.remove('hidden')
+  }
+})
+
+// Interact
+document.addEventListener('keydown', e => {
+  if (e.key.toLowerCase() === 'e' && document.pointerLockElement) {
+    checkSecrets()
+  }
+})
+
+// ─── Area detection ───
+const zonePositions = [
+  { name: 'CENTRAL SPIRE', pos: [0, 0, 0] },
+  { name: 'CRYSTAL GARDEN', pos: [-18, 0, -15] },
+  { name: 'COLOSSAL ARCHES', pos: [20, 0, -18] },
+  { name: 'THE GRID', pos: [-25, 0, 10] },
+  { name: 'FLOATING ISLANDS', pos: [25, 1, 15] },
+  { name: 'THE RING', pos: [0, 0, 30] },
+  { name: 'ABYSS GATE', pos: [0, 0, -30] },
+  { name: 'TETRA FOREST', pos: [-15, 0, 22] }
+]
+
+function getArea() {
+  let nearest = '—', nearD = 25
+  zonePositions.forEach(z => {
+    const d = camera.position.distanceTo(new THREE.Vector3(z.pos[0], z.pos[1], z.pos[2]))
+    if (d < nearD) { nearD = d; nearest = z.name }
+  })
+  return nearest
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ANIMATION
+// ═══════════════════════════════════════════════════════════════
+
+let fps = 0, frameCount = 0, lastFpsTime = 0
+
+function anim(time) {
+  requestAnimationFrame(anim)
+
+  // FPS counter
+  frameCount++
+  if (time - lastFpsTime > 1000) {
+    fps = frameCount; frameCount = 0; lastFpsTime = time
+    document.getElementById('fps').textContent = fps
+  }
+
+  // Movement
+  if (document.pointerLockElement) {
+    const speed = keys['shift'] ? 6 : 3
+    const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw))
+    const right = new THREE.Vector3(forward.z, 0, -forward.x)
+    vel.set(0, 0, 0)
+    if (keys['w']||keys['z']) vel.add(forward)
+    if (keys['s']) vel.sub(forward)
+    if (keys['a']||keys['q']) vel.sub(right)
+    if (keys['d']) vel.add(right)
+    if (vel.length() > 0) {
+      vel.normalize().multiplyScalar(speed * .016)
+      camera.position.x += vel.x
+      camera.position.z += vel.z
+    }
+
+    euler.set(pitch, yaw, 0)
+    camera.quaternion.setFromEuler(euler)
+  }
+
+  // Animate world elements
+  world.children.forEach(child => {
+    if (child.userData && child.userData.rotSpeed) {
+      child.rotation.x += child.userData.rotSpeed
+      child.rotation.y += child.userData.rotSpeed * 1.5
+    }
+  })
+
+  // Animate abyss gate particles
+  const abyss = world.children.find(c => c.position.x === 0 && c.position.z === -30 && c.position.y === 0)
+  if (abyss) {
+    abyss.children.forEach(c => {
+      if (c.userData && c.userData.speed) {
+        c.userData.theta += c.userData.speed
+        c.position.x = Math.cos(c.userData.theta) * c.userData.r
+        c.position.z = Math.sin(c.userData.theta) * c.userData.r
+      }
+    })
+  }
+
+  // Animate ring
+  const ring = world.children.find(c => c.position.x === 0 && c.position.z === 30 && c.position.y === 0)
+  if (ring) {
+    ring.rotation.y += .002
+  }
+
+  // Particles
+  const pp = particles.geometry.attributes.position.array
+  for (let i = 0; i < pCount; i++) {
+    pp[i*3] += pVel[i].x; pp[i*3+1] += pVel[i].y; pp[i*3+2] += pVel[i].z
+    const r = Math.sqrt(pp[i*3]**2+pp[i*3+1]**2+pp[i*3+2]**2)
+    if (r > 55) { pp[i*3] *= .97; pp[i*3+1] *= .97; pp[i*3+2] *= .97 }
+  }
+  particles.geometry.attributes.position.needsUpdate = true
+
+  // Secrets proximity fade
+  interactables.forEach(s => {
+    if (s.userData.found) return
+    const d = camera.position.distanceTo(s.position)
+    if (d < 8) s.material.opacity += ((1-d/8)*.5 - s.material.opacity) * .05
+    else if (s.material.opacity > .01) s.material.opacity -= .01
+  })
+
+  // HUD
+  document.getElementById('pos-display').textContent =
+    `${camera.position.x.toFixed(1)} ${camera.position.y.toFixed(1)} ${camera.position.z.toFixed(1)}`
+  document.getElementById('area-display').textContent = getArea()
+
+  renderer.render(scene, camera)
+}
+anim()
+
+// ─── Resize ───
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight
+  camera.updateProjectionMatrix()
+  renderer.setSize(innerWidth, innerHeight)
+})
+
+console.log('⬡ DEEP — geometric exploration')
+console.log('%c✦ WASD to move · E to discover · explore the void', 'color:#00d4aa')
+</script>
+</body>
+</html>
