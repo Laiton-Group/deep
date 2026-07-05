@@ -6,30 +6,30 @@
 <title>DEEP · LAITON ecosystem</title>
 <style>
 *{margin:0;padding:0}
-body{background:#07070d;overflow:hidden;font-family:monospace;cursor:default}
+body{background:#a0a5b1;overflow:hidden;font-family:'IBM Plex Mono',monospace;cursor:default}
 canvas{display:block}
-#blocker{position:fixed;top:0;left:0;width:100%;height:100%;z-index:10;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(7,7,13,.85);cursor:pointer;transition:opacity .5s}
+#blocker{position:fixed;top:0;left:0;width:100%;height:100%;z-index:10;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(160,165,177,.92);cursor:pointer;transition:opacity .5s}
 #blocker.hidden{opacity:0;pointer-events:none}
-#blocker h1{color:#fff;font-size:clamp(20px,4vw,48px);font-weight:400;letter-spacing:8px;text-transform:uppercase;margin-bottom:8px;font-family:monospace}
-#blocker h1 span{color:#00d4aa}
-#blocker p{color:rgba(255,255,255,.25);font-size:11px;letter-spacing:4px;text-transform:uppercase;margin-bottom:20px}
-#blocker .key{display:inline-block;border:1px solid rgba(255,255,255,.08);padding:6px 12px;border-radius:2px;margin:0 3px;color:rgba(255,255,255,.3);font-size:10px;letter-spacing:2px}
-#blocker .click-msg{color:rgba(0,212,170,.5);font-size:12px;letter-spacing:3px;margin-top:20px;border:1px solid rgba(0,212,170,.1);padding:10px 24px;border-radius:4px;transition:.3s}
-#blocker .click-msg:hover{background:rgba(0,212,170,.05);border-color:rgba(0,212,170,.2)}
+#blocker h1{color:#000;font-size:clamp(20px,4vw,48px);font-weight:400;letter-spacing:8px;text-transform:uppercase;margin-bottom:8px;font-family:'IBM Plex Mono',monospace}
+#blocker h1 span{color:rgba(0,0,0,.3)}
+#blocker p{color:rgba(0,0,0,.35);font-size:11px;letter-spacing:4px;text-transform:uppercase;margin-bottom:20px}
+#blocker .key{display:inline-block;border:1px solid rgba(0,0,0,.1);padding:6px 12px;border-radius:2px;margin:0 3px;color:rgba(0,0,0,.4);font-size:10px;letter-spacing:2px}
+#blocker .click-msg{color:rgba(0,0,0,.5);font-size:12px;letter-spacing:3px;margin-top:20px;border:1px solid rgba(0,0,0,.12);padding:10px 24px;border-radius:4px;transition:.3s}
+#blocker .click-msg:hover{background:rgba(0,0,0,.02);border-color:rgba(0,0,0,.25)}
 #hud{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:5;pointer-events:none;text-align:center}
-#hud .pos{color:rgba(255,255,255,.06);font-size:9px;letter-spacing:2px;font-family:monospace}
-#hud .area{color:rgba(0,212,170,.2);font-size:8px;letter-spacing:4px;text-transform:uppercase;margin-top:4px;font-family:monospace}
+#hud .pos{color:rgba(0,0,0,.1);font-size:9px;letter-spacing:2px;font-family:'IBM Plex Mono',monospace}
+#hud .area{color:rgba(0,0,0,.25);font-size:8px;letter-spacing:4px;text-transform:uppercase;margin-top:4px;font-family:'IBM Plex Mono',monospace}
 #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;pointer-events:none}
-#crosshair::before,#crosshair::after{content:'';position:absolute;background:rgba(255,255,255,.06)}
+#crosshair::before,#crosshair::after{content:'';position:absolute;background:rgba(0,0,0,.1)}
 #crosshair::before{width:1px;height:12px;top:-6px;left:0}
 #crosshair::after{width:12px;height:1px;top:0;left:-6px}
-#secret{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);z-index:6;pointer-events:none;text-align:center;opacity:0;transition:opacity .6s;font-family:monospace}
+#secret{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);z-index:6;pointer-events:none;text-align:center;opacity:0;transition:opacity .6s;font-family:'IBM Plex Mono',monospace}
 #secret.show{opacity:1}
-#secret .t{color:#fff;font-size:13px;letter-spacing:2px;margin-bottom:4px;text-shadow:0 0 20px rgba(0,212,170,.2)}
-#secret .h{color:rgba(0,212,170,.3);font-size:9px;letter-spacing:3px;text-transform:uppercase}
-#stats{position:fixed;top:16px;right:16px;z-index:5;pointer-events:none;color:rgba(255,255,255,.04);font-size:8px;letter-spacing:2px;text-align:right;line-height:1.8;font-family:monospace}
-#music-btn{position:fixed;top:16px;left:16px;z-index:5;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.15);font-family:monospace;font-size:7px;letter-spacing:2px;padding:5px 10px;border-radius:2px;cursor:pointer;transition:.3s;pointer-events:auto;text-transform:uppercase}
-#music-btn:hover{border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.3)}
+#secret .t{color:#000;font-size:13px;letter-spacing:2px;margin-bottom:4px}
+#secret .h{color:rgba(0,0,0,.35);font-size:9px;letter-spacing:3px;text-transform:uppercase}
+#stats{position:fixed;top:16px;right:16px;z-index:5;pointer-events:none;color:rgba(0,0,0,.06);font-size:8px;letter-spacing:2px;text-align:right;line-height:1.8;font-family:'IBM Plex Mono',monospace}
+#music-btn{position:fixed;top:16px;left:16px;z-index:5;background:rgba(0,0,0,.03);border:1px solid rgba(0,0,0,.08);color:rgba(0,0,0,.2);font-family:'IBM Plex Mono',monospace;font-size:7px;letter-spacing:2px;padding:5px 10px;border-radius:2px;cursor:pointer;transition:.3s;pointer-events:auto;text-transform:uppercase}
+#music-btn:hover{border-color:rgba(0,0,0,.15);color:rgba(0,0,0,.4)}
 </style>
 </head>
 <body>
@@ -48,15 +48,15 @@ canvas{display:block}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-const scene=new THREE.Scene();scene.background=new THREE.Color(0x07070d);scene.fog=new THREE.FogExp2(0x07070d,.004)
+const scene=new THREE.Scene();scene.background=new THREE.Color(0xa0a5b1);scene.fog=new THREE.FogExp2(0xa0a5b1,.005)
 const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.1,200);camera.position.set(0,1.6,0)
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.0;document.body.prepend(renderer.domElement)
-scene.add(new THREE.AmbientLight(0x111133,.25));scene.add(new THREE.HemisphereLight(0x00d4aa,0x050510,.3))
-const sun=new THREE.DirectionalLight(0xffeedd,.8);sun.position.set(10,20,10);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);scene.add(sun)
-scene.add(new THREE.DirectionalLight(0x4488ff,.15).position.set(-10,5,-10));scene.add(new THREE.DirectionalLight(0xff00aa,.05).position.set(0,-10,0))
+scene.add(new THREE.AmbientLight(0x8899bb,.3));scene.add(new THREE.HemisphereLight(0xbbccee,0x667799,.35))
+const sun=new THREE.DirectionalLight(0xccddff,.7);sun.position.set(10,20,10);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);scene.add(sun)
+scene.add(new THREE.DirectionalLight(0x99aacc,.2).position.set(-10,5,-10))
 
 // Music
-const audio=new Audio('https://lambda.vgmtreasurechest.com/soundtracks/super-mario-odyssey-original-soundtrack/ycsesdlu/4-43.%20Shiveria%20Snowscape.mp3');audio.loop=true;audio.volume=.25
+const audio=new Audio('https://raw.githubusercontent.com/Laiton-Group/hub/main/shiveria.mp3');audio.loop=true;audio.volume=.25
 let musicOn=false
 document.getElementById('music-btn').addEventListener('click',()=>{musicOn=!musicOn;if(musicOn){audio.play().catch(()=>{});document.getElementById('music-btn').textContent='♪ music on'}else{audio.pause();document.getElementById('music-btn').textContent='♪ music off'}})
 
